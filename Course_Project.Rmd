@@ -1,0 +1,114 @@
+---
+title: "Course project"
+author: "Julien Forthomme"
+date: "8/1/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Objective
+
+The goal of this project is to create a model capable of predicting how a specific training exercise has been done.
+
+## Data
+
+More information on the dataset is available from this website: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Loading the training and test datasets. The "na.strings" argument is used to convert missing/error values to "NA". 
+
+```{r}
+original_data <- read.csv("pml-training.csv", na.strings=c("","#DIV/0!", "NA"), header=TRUE)
+final_testing <- read.csv("pml-testing.csv", na.strings=c("","#DIV/0!", "NA"), header=TRUE)
+```
+
+Loading libraries and setting the seed
+
+```{r message=FALSE}
+library(tidyverse)
+library(naniar)
+library(caret)
+library(rattle)
+library(e1071)
+library(randomForest)
+set.seed(2604)
+```
+
+## Exploratory analysis
+
+The original dataset contains `r dim(original_data)[1]` observations of `r dim(original_data)[2]` variables. 
+Using the summary function, we can already see that some variables are likely to be of no use as they don't contain any data, see for example the "kurtosis_yaw_belt" variable.
+
+```{r}
+summary(original_data$kurtosis_yaw_belt)
+```
+
+Let's find the names of all the variables that contain more than 95% of NA in the training set so we can remove those variables from the list of predictors.
+
+```{r}
+removeNAcol <- function(data,pctNA){
+        data[,sapply(data, function(x) (mean(is.na(x)))<pctNA)]
+}
+
+data <- removeNAcol(original_data, 0.95)
+```
+
+We also don't want the answer to be dependent on the time or the performer
+
+```{r}
+data <- data[,-(1:7)]
+```
+
+## Separation in training and testing sets
+
+Let's separate the dataset in 60/40 (training/testing) based on the "classe" variable.
+ 
+```{r}
+inTrain <- createDataPartition(y=data$classe, p=0.6, list=FALSE)
+training <- data[inTrain,]
+testing <- data[-inTrain,]
+```
+
+##Preprocessing
+
+### Near zero variables
+
+None of the remaining variables seem to be near zero variables.
+
+```{r}
+nzv <- nearZeroVar(training, saveMetrics= TRUE)
+sum(nzv$nzv)
+```
+
+
+## Model
+
+The model is supposed to predict the classe (factor variable) using 52 variables. A random forest model is a good pic for that kind of work.
+
+```{r}
+rf <- randomForest(as.factor(classe) ~ ., data=training)
+pred_rf <- predict(rf, testing)
+confusionMatrix(pred_rf, testing$classe)
+```
+
+The accuracy of the model used on the testing data set is 0.9939, this model is a keeper!
+
+The varImpPlot function can be used to visualize the variable importance as measured by the random forest.
+
+```{r}
+varImpPlot(rf)
+```
+
+
+## Prediction on final testing set
+
+```{r}
+pred_rf <- predict(rf, final_testing)
+pred_rf
+```
+
+This prediction scores 100% on the Cousera quiz. Yay!
